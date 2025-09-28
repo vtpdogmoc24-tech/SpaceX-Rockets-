@@ -1,0 +1,273 @@
+<!-- Save as spacex-rockets.html and open in your browser -->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>SpaceX Rockets — Explorer</title>
+  <style>
+    :root{
+      --bg:#0b1220;
+      --card:#0f1724;
+      --muted:#9aa7bf;
+      --accent:#7dd3fc;
+      color-scheme: dark;
+    }
+    body{
+      margin:0;
+      font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+      background: linear-gradient(180deg,#04060a 0%, var(--bg) 100%);
+      color:#e6eef8;
+      padding:24px;
+      -webkit-font-smoothing:antialiased;
+    }
+    header{display:flex;align-items:center;gap:16px;margin-bottom:18px}
+    header h1{margin:0;font-size:1.4rem}
+    .controls{margin-left:auto;display:flex;gap:8px;align-items:center}
+    input[type="search"]{
+      background:rgba(255,255,255,0.04);
+      border:1px solid rgba(255,255,255,0.04);
+      color:inherit;
+      padding:8px 10px;
+      border-radius:8px;
+      min-width:200px;
+    }
+    #container{
+      display:grid;
+      grid-template-columns: repeat(auto-fit,minmax(300px,1fr));
+      gap:16px;
+    }
+    .card{
+      background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.06));
+      border:1px solid rgba(255,255,255,0.03);
+      padding:14px;
+      border-radius:12px;
+      box-shadow: 0 6px 18px rgba(2,6,23,0.6);
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+      min-height:200px;
+    }
+    .media{
+      display:block;
+      height:160px;
+      border-radius:8px;
+      overflow:hidden;
+      background: #071223;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+    .media img{width:100%; height:100%; object-fit:cover; display:block;}
+    .title{display:flex;gap:8px;align-items:center;justify-content:space-between}
+    .title h2{margin:0;font-size:1.05rem}
+    .meta{font-size:0.85rem;color:var(--muted)}
+    .stats{display:flex;gap:12px;flex-wrap:wrap;font-size:0.85rem;color:var(--muted)}
+    .stat{background:rgba(255,255,255,0.02);padding:6px 8px;border-radius:8px}
+    .desc{font-size:0.95rem;color:#dbe9ff;line-height:1.35;max-height:5.2rem;overflow:hidden}
+    .foot{display:flex;gap:8px;align-items:center;justify-content:space-between;margin-top:auto}
+    button.link{
+      background:transparent;color:var(--accent);border:1px solid rgba(125,211,252,0.12);
+      padding:6px 10px;border-radius:8px;cursor:pointer;
+    }
+    .images-row{display:flex;gap:6px;overflow:auto;padding-top:6px}
+    .thumb{width:56px;height:40px;border-radius:6px;flex:0 0 auto;overflow:hidden;border:1px solid rgba(255,255,255,0.04)}
+    .thumb img{width:100%;height:100%;object-fit:cover;display:block}
+    .loading{opacity:0.9;text-align:center;padding:40px;background:transparent;border-radius:10px}
+    .error{color:#ffd2d2;background:rgba(255,0,0,0.03);padding:10px;border-radius:8px}
+    @media (max-width:520px){
+      header{flex-direction:column;align-items:flex-start;gap:10px}
+      .controls{margin-left:0}
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>SpaceX Rockets — Explorer</h1>
+      <div style="color:var(--muted);font-size:0.9rem">Live data from the public SpaceX API</div>
+    </div>
+    <div class="controls">
+      <input id="search" type="search" placeholder="Search rocket by name (eg. Falcon 9)" />
+      <button id="refresh" class="link">Refresh</button>
+    </div>
+  </header>
+
+  <div id="status" class="loading">Loading rockets…</div>
+  <div id="container" aria-live="polite"></div>
+
+<script>
+  // API endpoint (public SpaceX API v4)
+  const API = 'https://api.spacexdata.com/v4/rockets';
+
+  const container = document.getElementById('container');
+  const status = document.getElementById('status');
+  const searchInput = document.getElementById('search');
+  const refreshBtn = document.getElementById('refresh');
+
+  let rockets = []; // cached rockets
+
+  async function loadRockets(){
+    status.textContent = 'Loading rockets…';
+    status.style.display = '';
+    container.innerHTML = '';
+    try {
+      const res = await fetch(API, {cache: 'no-store'});
+      if(!res.ok) throw new Error('API error: ' + res.status);
+      rockets = await res.json();
+      if(!Array.isArray(rockets)) rockets = [];
+      renderList(rockets);
+      status.style.display = 'none';
+    } catch (err){
+      status.textContent = '';
+      status.className = 'error';
+      status.textContent = 'Failed to load rockets — ' + err.message;
+    }
+  }
+
+  function formatMeters(obj){
+    if(!obj) return '-';
+    // height or diameter objects: {meters: 70, feet: 229.6}
+    return obj.meters ? `${obj.meters} m` : (obj.feet ? `${obj.feet} ft` : '-');
+  }
+
+  function formatMass(m){
+    return m && m.kg ? `${m.kg.toLocaleString()} kg` : '-';
+  }
+
+  function renderList(list){
+    container.innerHTML = '';
+    if(list.length === 0){
+      container.innerHTML = '<div class="loading">No rockets found.</div>';
+      return;
+    }
+    list.forEach(r => {
+      const card = document.createElement('article');
+      card.className = 'card';
+
+      const media = document.createElement('div');
+      media.className = 'media';
+      const mainImg = document.createElement('img');
+      mainImg.alt = r.name + ' image';
+      mainImg.src = (r.flickr_images && r.flickr_images[0]) || '';
+      mainImg.onerror = () => { mainImg.style.display = 'none'; media.textContent = 'No image'; };
+      media.appendChild(mainImg);
+
+      const title = document.createElement('div');
+      title.className = 'title';
+      const h2 = document.createElement('h2');
+      h2.textContent = r.name + (r.active ? ' • Active' : ' • Retired');
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+      meta.textContent = `First flight: ${r.first_flight || '—'}`;
+      title.appendChild(h2);
+      title.appendChild(meta);
+
+      const desc = document.createElement('div');
+      desc.className = 'desc';
+      desc.textContent = r.description || 'No description';
+
+      const stats = document.createElement('div');
+      stats.className = 'stats';
+      const sItems = [
+        ['Stages', r.stages],
+        ['Boosters', r.boosters],
+        ['Success rate', r.success_rate_pct ? r.success_rate_pct + '%' : '-'],
+        ['Cost / launch', r.cost_per_launch ? '$' + r.cost_per_launch.toLocaleString() : '-'],
+        ['Height', formatMeters(r.height)],
+        ['Diameter', formatMeters(r.diameter)],
+        ['Mass', formatMass(r.mass)]
+      ];
+      sItems.forEach(([k,v])=>{
+        const s = document.createElement('div');
+        s.className = 'stat';
+        s.innerHTML = `<strong style="color:var(--accent)">${k}:</strong> ${v ?? '-'}`;
+        stats.appendChild(s);
+      });
+
+      const imagesRow = document.createElement('div');
+      imagesRow.className = 'images-row';
+      if(Array.isArray(r.flickr_images)){
+        r.flickr_images.forEach(url=>{
+          const t = document.createElement('div');
+          t.className = 'thumb';
+          const img = document.createElement('img');
+          img.src = url;
+          img.alt = r.name + ' photo';
+          img.onerror = ()=> t.style.display='none';
+          t.appendChild(img);
+          t.addEventListener('click', ()=> {
+            // swap main image
+            if(mainImg.src !== url) mainImg.src = url;
+          });
+          imagesRow.appendChild(t);
+        });
+      }
+
+      const foot = document.createElement('div');
+      foot.className = 'foot';
+      const wiki = document.createElement('a');
+      wiki.className = 'link';
+      wiki.href = r.wikipedia || '#';
+      wiki.target = '_blank';
+      wiki.rel = 'noopener';
+      wiki.textContent = 'Open Wikipedia';
+      const detailsBtn = document.createElement('button');
+      detailsBtn.className = 'link';
+      detailsBtn.textContent = 'Show more';
+      detailsBtn.addEventListener('click', ()=> {
+        // toggle a modal / alert with JSON (simple)
+        const details = {
+          name: r.name,
+          id: r.id,
+          flickr_images: r.flickr_images,
+          payload_weights: r.payload_weights,
+          engines: r.engines,
+          first_flight: r.first_flight,
+          country: r.country,
+          company: r.company
+        };
+        // show fairly formatted details
+        const pretty = JSON.stringify(details, null, 2);
+        // use window.open to show details in new window
+        const w = window.open('', '_blank', 'width=700,height=600,scrollbars=yes');
+        w.document.write(`<pre style="white-space:pre-wrap;font-family:monospace">${escapeHtml(pretty)}</pre>`);
+        w.document.title = r.name + ' — details';
+      });
+
+      foot.appendChild(wiki);
+      foot.appendChild(detailsBtn);
+
+      card.appendChild(media);
+      card.appendChild(title);
+      card.appendChild(desc);
+      card.appendChild(stats);
+      if(imagesRow.children.length) card.appendChild(imagesRow);
+      card.appendChild(foot);
+
+      container.appendChild(card);
+    });
+  }
+
+  function escapeHtml(s){
+    return s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  }
+
+  // search filter
+  function applyFilter(){
+    const q = searchInput.value.trim().toLowerCase();
+    if(!q) renderList(rockets);
+    else {
+      const filtered = rockets.filter(r => r.name.toLowerCase().includes(q) || (r.description||'').toLowerCase().includes(q));
+      renderList(filtered);
+    }
+  }
+
+  searchInput.addEventListener('input', applyFilter);
+  refreshBtn.addEventListener('click', loadRockets);
+
+  // initial load
+  loadRockets();
+</script>
+</body>
+</html>⁹
